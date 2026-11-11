@@ -19,8 +19,8 @@
 
   .main { flex: 1; overflow: auto; padding: 12px; }
   .foot {
-    flex: none; padding: 8px 12px;
-    border-top: 1px solid var(--figma-color-border, #e5e5e5);
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 12px; border-top: 1px solid var(--figma-color-border, #e5e5e5);
   }
   .link {
     padding: 0; border: 0; background: none; cursor: pointer;
@@ -47,17 +47,26 @@
   .grp.nb .grp-title::before { background: var(--figma-color-icon-brand, #0d99ff); }
   .grp.dup .grp-title::before { background: var(--figma-color-icon-danger, #f24822); }
   .cnt { white-space: nowrap; color: var(--figma-color-text-secondary, #666); }
+  .block {
+    margin-top: 6px; padding: 6px; border-radius: 8px;
+    background: var(--figma-color-bg-secondary, #f5f5f5);
+  }
   .node {
-    margin: 6px 0 0; font-weight: 500; color: var(--figma-color-text-secondary, #666);
+    margin: 0 2px 4px; font-weight: 500; color: var(--figma-color-text-secondary, #666);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .row {
-    display: block; width: calc(100% + 12px); margin: 0 -6px; height: 24px; padding: 0 6px;
-    text-align: left; line-height: 24px; white-space: pre; overflow: hidden; text-overflow: ellipsis;
-    background: transparent; border: 0; border-radius: 4px; cursor: pointer;
+    display: block; width: 100%; height: 28px; padding: 0 8px;
+    text-align: left; line-height: 26px; white-space: pre; overflow: hidden; text-overflow: ellipsis;
+    background: var(--figma-color-bg, #fff); border: 1px solid var(--figma-color-border, #e5e5e5);
+    border-radius: 6px; cursor: pointer;
   }
-  .row:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
-  .row[aria-current="true"] { background: var(--figma-color-bg-selected, #e5f4ff); }
+  .row + .row { margin-top: 4px; }
+  .row:hover { border-color: var(--figma-color-border-strong, #b3b3b3); }
+  .row[aria-current="true"] {
+    background: var(--figma-color-bg-selected, #e5f4ff);
+    border-color: var(--figma-color-border-selected, #0d99ff);
+  }
   .row:focus-visible { outline: 2px solid var(--figma-color-border-brand-strong, #0d99ff); outline-offset: -2px; }
   mark { border-radius: 2px; padding: 0 1px; font-weight: 700; }
   mark.nb { background: var(--figma-color-bg-brand-tertiary, #e5f4ff); color: var(--figma-color-text-brand, #0d99ff); }
@@ -102,6 +111,7 @@
 
   <footer class="foot">
     <button id="helpLink" class="link" type="button">Как работает плагин</button>
+    <span class="ver muted" title="Версия плагина">v1.0.0</span>
   </footer>
 
   <div id="help" class="overlay" role="dialog" aria-labelledby="helpTitle" hidden>
@@ -222,7 +232,7 @@
   });
   $('annotate').addEventListener('change', (e) => post({ type: 'set-annotate', value: e.target.checked }));
 
-  function group(root, kind, title, g, multi) {
+  function group(root, kind, title, g) {
     if (!g.places) return;
     const box = el('section', 'grp ' + kind);
     const head = el('div', 'grp-head');
@@ -230,11 +240,14 @@
     head.appendChild(el('span', 'cnt', layers(g.nodes) + ' · ' + places(g.places)));
     box.appendChild(head);
 
+    // Каждый слой — отдельный блок с названием сверху
     let lastId = null;
-    const frag = document.createDocumentFragment();
+    let block = null;
     g.items.forEach((it) => {
-      if (multi && it.id !== lastId) {
-        frag.appendChild(el('div', 'node', it.name));
+      if (it.id !== lastId) {
+        block = el('div', 'block');
+        block.appendChild(el('div', 'node', it.name));
+        box.appendChild(block);
         lastId = it.id;
       }
       const key = kind + ':' + it.id + ':' + it.s;
@@ -253,9 +266,8 @@
         activeKey = key;
         post({ type: 'focus', id: it.id, s: it.s, e: it.e });
       });
-      frag.appendChild(b);
+      block.appendChild(b);
     });
-    box.appendChild(frag);
     if (g.places > g.items.length) {
       box.appendChild(el('div', 'more muted', 'Показаны первые ' + g.items.length + ' из ' + g.places));
     }
@@ -270,9 +282,8 @@
       root.appendChild(el('div', 'ok', 'Всё в порядке: неразрывные пробелы на месте, повторов нет'));
       return;
     }
-    const multi = m.count > 1;
-    group(root, 'nb', 'Не хватает неразрывных пробелов', m.nbsp, multi);
-    group(root, 'dup', 'Повторяющиеся пробелы', m.dups, multi);
+    group(root, 'nb', 'Не хватает неразрывных пробелов', m.nbsp);
+    group(root, 'dup', 'Повторяющиеся пробелы', m.dups);
   }
 
   window.onmessage = (ev) => {

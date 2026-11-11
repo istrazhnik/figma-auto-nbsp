@@ -5,7 +5,7 @@ Figma plugin, plain JS, no build. Selected text layers → live list of missing 
 ## Files
 - `manifest.json` — editorType figma, documentAccess dynamic-page, no network
 - `code.js` — all logic (main thread). Pure + tested: `computeOps`, `collapseDups`, `fixText`; rest uses `figma.*`
-- `ui.html` — iframe UI, Figma theme CSS vars (`themeColors:true`). Layer text enters DOM only via `textContent`. `HELP` array = in-plugin rules reference (overlay opened by footer link «Как работает плагин», × / Esc closes)
+- `ui.html` — iframe UI (version label `v1.0.0` in footer — keep in sync with `package.json`), Figma theme CSS vars (`themeColors:true`). Layer text enters DOM only via `textContent`. `HELP` array = in-plugin rules reference (overlay opened by footer link «Как работает плагин», × / Esc closes)
 - `tests/run.js`, `tests/cases.json` — snapshot tests of `fixText` (dup collapse + `computeOps`) in node `vm` (no Figma needed; `_` = NBSP)
 - `README.md` — rules reference for humans
 - `.claude/skills/` — `nbsp-add-rule`, `nbsp-figma-verify`

@@ -20,7 +20,8 @@ Figma plugin, plain JS, no build. Selected text layers → live list of missing 
 - Annotations (checkbox "Добавить аннотацию", persisted via clientStorage): category "Текст" reused, created only if missing. Label = text with NBSP→`&nbsp;`. Own annotation found by (1) exact label == pluginData `nbspAnnotationLabel`, (2) same normalized text as stored, (3) normalized == current text. Never touch other annotations (incl. "Текст" with other content, e.g. links); ours is replaced in place or appended; `properties` preserved.
 - Live check: `scope` = text nodes of selection; `analyze()` → `issues` msg {count, nbsp, dups: {nodes, places, items≤100}}. NBSP ops ≤3 chars apart = one place; focus range expanded to whole words; dup place = the run itself. Debounced 120 ms on `selectionchange` and page `nodechange` (re-registered on `currentpagechange`). Click → `focus` sets `pinnedId` so the resulting selectionchange keeps the scope. Run acts on `scope`.
 - No auto-run on launch, checkbox doesn't run anything; results only via `figma.notify` (no result panel in UI).
-- Messages: UI→code `ready|run|set-annotate|focus`; code→UI `init|issues|done`.
+- Messages: UI→code `ready|run|set-annotate|focus|resize`; code→UI `init|issues|done`.
+- Window resize: corner grip (`#grip`, UI) → `resize {w,h,save}` (rAF-throttled) → `figma.ui.resize` clamped by `SIZE` (min 300×360); final size saved to clientStorage `size`, restored on launch.
 
 ## Decided rules (user decisions; don't revert without asking)
 - Numbers ≥4 digits grouped by 3; existing ' ' between groups → NBSP. Skip: fractions, letter/#/_-adjacent, leading 0, ISO dates, years (before г./гг./год…, after a month name), phone numbers.

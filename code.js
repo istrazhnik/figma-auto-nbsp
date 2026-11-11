@@ -626,7 +626,25 @@ async function run(annotate) {
 
 // ----------------------------------- UI ------------------------------------
 
-figma.showUI(__html__, { width: 340, height: 480, themeColors: true, title: 'Auto-nbsp' });
+// Размер окна: меняется уголком в правом нижнем углу и запоминается между запусками
+const SIZE = { w: 340, h: 480, minW: 300, minH: 360, maxW: 1200, maxH: 1600 };
+const clampSize = (s) => ({
+  w: Math.round(Math.min(SIZE.maxW, Math.max(SIZE.minW, Number(s && s.w) || SIZE.w))),
+  h: Math.round(Math.min(SIZE.maxH, Math.max(SIZE.minH, Number(s && s.h) || SIZE.h)))
+});
+
+figma.showUI(__html__, { width: SIZE.w, height: SIZE.h, themeColors: true, title: 'Auto-nbsp' });
+(async () => {
+  try {
+    const saved = await figma.clientStorage.getAsync('size');
+    if (saved) {
+      const s = clampSize(saved);
+      if (s.w !== SIZE.w || s.h !== SIZE.h) figma.ui.resize(s.w, s.h);
+    }
+  } catch (e) {
+    /* нет сохранённого размера — остаётся стандартный */
+  }
+})();
 
 figma.on('selectionchange', () => {
   const sel = figma.currentPage.selection;
@@ -653,6 +671,12 @@ figma.ui.onmessage = async (msg) => {
     case 'set-annotate':
       await figma.clientStorage.setAsync('annotate', !!msg.value);
       break;
+    case 'resize': {
+      const s = clampSize(msg);
+      figma.ui.resize(s.w, s.h);
+      if (msg.save) await figma.clientStorage.setAsync('size', s);
+      break;
+    }
     case 'run':
       await run(!!msg.annotate);
       break;

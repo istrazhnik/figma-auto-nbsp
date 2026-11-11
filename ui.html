@@ -20,8 +20,15 @@
   .main { flex: 1; overflow: auto; padding: 12px; }
   .foot {
     flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 8px 12px; border-top: 1px solid var(--figma-color-border, #e5e5e5);
+    padding: 8px 22px 8px 12px; border-top: 1px solid var(--figma-color-border, #e5e5e5);
   }
+  /* Уголок для изменения размера окна; поверх справки, чтобы работал и в ней */
+  .grip {
+    position: fixed; right: 0; bottom: 0; z-index: 20; width: 16px; height: 16px;
+    display: grid; place-items: center; cursor: nwse-resize; touch-action: none;
+    color: var(--figma-color-icon-tertiary, #b3b3b3);
+  }
+  .grip:hover { color: var(--figma-color-icon-secondary, #666); }
   .link {
     padding: 0; border: 0; background: none; cursor: pointer;
     color: var(--figma-color-text-brand, #0d99ff);
@@ -113,6 +120,11 @@
     <button id="helpLink" class="link" type="button">Как работает плагин</button>
     <span class="ver muted" title="Версия плагина">v1.0.0</span>
   </footer>
+  <div id="grip" class="grip" title="Потяните, чтобы изменить размер окна" aria-hidden="true">
+    <svg width="8" height="8" viewBox="0 0 8 8">
+      <path d="M7.5 1.5l-6 6M7.5 4.5l-3 3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+    </svg>
+  </div>
 
   <div id="help" class="overlay" role="dialog" aria-labelledby="helpTitle" hidden>
     <div class="overlay-head">
@@ -302,6 +314,36 @@
       $('run').disabled = selCount === 0;
     }
   };
+
+  // ------------------------------ Размер окна -------------------------------
+  // Окно меняет код плагина (figma.ui.resize); отсюда шлём желаемый размер не чаще раза за кадр
+  (() => {
+    const grip = $('grip');
+    let start = null;
+    let size = null;
+    let frame = 0;
+    const send = (save) => post({ type: 'resize', w: size.w, h: size.h, save });
+
+    grip.addEventListener('pointerdown', (e) => {
+      start = { x: e.screenX, y: e.screenY, w: window.innerWidth, h: window.innerHeight };
+      size = { w: start.w, h: start.h };
+      grip.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (!start) return;
+      size = { w: start.w + e.screenX - start.x, h: start.h + e.screenY - start.y };
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; send(false); });
+    });
+    const end = () => {
+      if (!start) return;
+      start = null;
+      if (frame) { cancelAnimationFrame(frame); frame = 0; }
+      send(true);
+    };
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('lostpointercapture', end);
+  })();
 
   post({ type: 'ready' });
 </script>

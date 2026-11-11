@@ -1,6 +1,6 @@
 'use strict';
 
-// Неразрывные пробелы — плагин для Figma (русский текст, арабские цифры)
+// Auto-nbsp — плагин для Figma (русский текст, арабские цифры)
 
 const NBSP = '\u00A0';
 const DATA_KEY = 'nbspAnnotationLabel'; // последний текст аннотации, созданной плагином
@@ -460,7 +460,7 @@ async function run(annotate) {
 
 // ----------------------------------- UI ------------------------------------
 
-figma.showUI(__html__, { width: 340, height: 520, themeColors: true, title: 'Неразрывные пробелы' });
+figma.showUI(__html__, { width: 340, height: 520, themeColors: true, title: 'Auto-nbsp' });
 
 const sendSelection = () => figma.ui.postMessage({ type: 'selection', count: collectTextNodes().length });
 figma.on('selectionchange', sendSelection);

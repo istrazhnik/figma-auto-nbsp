@@ -4,32 +4,31 @@
 <meta charset="utf-8">
 <style>
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
-    padding: 12px;
+    display: flex;
+    flex-direction: column;
     font: 11px/16px Inter, system-ui, -apple-system, sans-serif;
     color: var(--figma-color-text, #333);
     background: var(--figma-color-bg, #fff);
   }
   button { font: inherit; color: inherit; }
-  .muted { color: var(--figma-color-text-secondary, #666); }
-  .section { margin-top: 12px; }
   [hidden] { display: none !important; }
+  .muted { color: var(--figma-color-text-secondary, #666); }
 
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
-  .icon {
-    flex: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-weight: 600;
-    background: transparent; border: 1px solid var(--figma-color-border, #e5e5e5);
-    color: var(--figma-color-text-secondary, #666);
+  .main { flex: 1; overflow: auto; padding: 12px; }
+  .foot {
+    flex: none; padding: 8px 12px;
+    border-top: 1px solid var(--figma-color-border, #e5e5e5);
   }
-  .icon:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
-  .icon[aria-pressed="true"] {
-    background: var(--figma-color-bg-brand, #0d99ff);
-    border-color: var(--figma-color-bg-brand, #0d99ff);
-    color: var(--figma-color-text-onbrand, #fff);
+  .link {
+    padding: 0; border: 0; background: none; cursor: pointer;
+    color: var(--figma-color-text-brand, #0d99ff);
   }
+  .link:hover { text-decoration: underline; }
 
-  .check { display: flex; align-items: center; gap: 8px; margin: 12px 0; cursor: pointer; user-select: none; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 10px 0; cursor: pointer; user-select: none; }
   .check input { margin: 0; width: 14px; height: 14px; accent-color: var(--figma-color-bg-brand, #0d99ff); }
 
   .primary {
@@ -40,62 +39,82 @@
   .primary:hover:not(:disabled) { background: var(--figma-color-bg-brand-hover, #0b87e0); }
   .primary:disabled { opacity: .4; cursor: default; }
 
-  .card { border: 1px solid var(--figma-color-border, #e5e5e5); border-radius: 6px; padding: 8px 10px; }
-  .stat { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
-  .stat b { font-weight: 600; }
-  .head { font-weight: 600; margin-bottom: 4px; }
-  .warn {
-    background: var(--figma-color-bg-warning-tertiary, #fff4d6);
-    border: 1px solid var(--figma-color-border-warning, #f5c04a);
-    border-radius: 6px; padding: 8px 10px;
+  /* Найденные места */
+  .grp { margin-top: 14px; }
+  .grp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+  .grp-title { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .grp-title::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .grp.nb .grp-title::before { background: var(--figma-color-icon-brand, #0d99ff); }
+  .grp.dup .grp-title::before { background: var(--figma-color-icon-danger, #f24822); }
+  .cnt { white-space: nowrap; color: var(--figma-color-text-secondary, #666); }
+  .node {
+    margin: 6px 0 0; font-weight: 500; color: var(--figma-color-text-secondary, #666);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .ok {
-    background: var(--figma-color-bg-success-tertiary, #e3f7ea);
-    border: 1px solid var(--figma-color-border-success, #7ad39b);
-    border-radius: 6px; padding: 8px 10px;
+  .row {
+    display: block; width: calc(100% + 12px); margin: 0 -6px; height: 24px; padding: 0 6px;
+    text-align: left; line-height: 24px; white-space: pre; overflow: hidden; text-overflow: ellipsis;
+    background: transparent; border: 0; border-radius: 4px; cursor: pointer;
   }
-  .dup-item {
-    display: block; width: 100%; text-align: left; margin-top: 6px; padding: 6px 8px; cursor: pointer;
-    background: var(--figma-color-bg, #fff);
-    border: 1px solid var(--figma-color-border, #e5e5e5); border-radius: 6px;
-  }
-  .dup-item:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
-  .dup-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ctx, .ex { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, Consolas, monospace; }
-  .ctx { margin-top: 2px; word-break: break-all; }
-  .ctx mark {
-    border-radius: 2px; padding: 0 1px;
-    background: var(--figma-color-bg-danger, #f24822);
-    color: var(--figma-color-text-onbrand, #fff);
-  }
-  .legend, .skip { margin-top: 6px; }
+  .row:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
+  .row[aria-current="true"] { background: var(--figma-color-bg-selected, #e5f4ff); }
+  .row:focus-visible { outline: 2px solid var(--figma-color-border-brand-strong, #0d99ff); outline-offset: -2px; }
+  mark { border-radius: 2px; padding: 0 1px; font-weight: 700; }
+  mark.nb { background: var(--figma-color-bg-brand-tertiary, #e5f4ff); color: var(--figma-color-text-brand, #0d99ff); }
+  mark.dup { background: var(--figma-color-bg-danger-tertiary, #ffe2e0); color: var(--figma-color-text-danger, #f24822); }
+  .more { margin-top: 2px; }
+  .ok { margin-top: 14px; color: var(--figma-color-text-success, #14ae5c); }
 
   /* Справка */
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    background: var(--figma-color-bg, #fff);
+  }
+  .overlay-head {
+    flex: none; display: flex; align-items: center; justify-content: space-between;
+    height: 40px; padding: 0 8px 0 12px; font-weight: 600;
+    border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
+  }
+  .close {
+    width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; cursor: pointer;
+    display: grid; place-items: center; background: transparent;
+    color: var(--figma-color-icon, #333);
+  }
+  .close:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
+  .overlay-body { flex: 1; overflow: auto; padding: 0 12px 12px; }
   .help-intro { margin: 12px 0 4px; }
   .help-group { margin-top: 10px; }
   .help-title { font-weight: 600; }
-  .help-text { margin-top: 2px; color: var(--figma-color-text-secondary, #666); }
-  .ex { margin-top: 2px; }
-  .nb { color: var(--figma-color-text-brand, #0d99ff); font-weight: 700; }
+  .help-text { margin-top: 2px; white-space: pre-wrap; word-break: break-word; color: var(--figma-color-text-secondary, #666); }
+  .nbm { color: var(--figma-color-text-brand, #0d99ff); font-weight: 700; }
 </style>
 </head>
 <body>
-  <div class="top">
+  <main class="main">
     <div id="sel" class="muted">Загрузка…</div>
-    <button id="helpBtn" class="icon" type="button" aria-pressed="false"
-            title="Справка: где ставятся неразрывные пробелы" aria-label="Справка">?</button>
-  </div>
-
-  <div id="main">
     <label class="check">
       <input type="checkbox" id="annotate">
       <span>Добавить аннотацию</span>
     </label>
     <button id="run" class="primary" type="button" disabled>Расставить неразрывные пробелы</button>
-    <div id="result"></div>
-  </div>
+    <div id="issues"></div>
+  </main>
 
-  <div id="help" hidden></div>
+  <footer class="foot">
+    <button id="helpLink" class="link" type="button">Как работает плагин</button>
+  </footer>
+
+  <div id="help" class="overlay" role="dialog" aria-labelledby="helpTitle" hidden>
+    <div class="overlay-head">
+      <span id="helpTitle">Как работает плагин</span>
+      <button id="helpClose" class="close" type="button" title="Закрыть" aria-label="Закрыть">
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div id="helpBody" class="overlay-body"></div>
+  </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -107,6 +126,8 @@
     if (b > 1 && b < 5) return few;
     return b === 1 ? one : many;
   };
+  const layers = (n) => n + ' ' + plural(n, 'слой', 'слоя', 'слоёв');
+  const places = (n) => n + ' ' + plural(n, 'место', 'места', 'мест');
 
   const el = (tag, cls, text) => {
     const e = document.createElement(tag);
@@ -118,6 +139,13 @@
   // ------------------------------- Справка ---------------------------------
   // «_» в примерах — неразрывный пробел. Список нужно держать в соответствии с code.js.
   const HELP = [
+    ['Проверка выделения',
+      'Сразу при выделении слоёв (или фрейма с текстами) плагин показывает, где не хватает неразрывных пробелов ' +
+      'и где стоят повторяющиеся пробелы. Нажмите на строку — слой и фрагмент будут выделены на холсте. ' +
+      'Текст меняется только по кнопке «Расставить неразрывные пробелы».'],
+    ['Повторяющиеся пробелы',
+      'При нажатии на кнопку два и более пробела подряд заменяются одним. Если среди них был неразрывный, остаётся он. ' +
+      'Оставшийся пробел становится неразрывным, если этого требуют правила ниже: «в  доме» → в_доме, «Он  пришёл» → Он_пришёл.'],
     ['Числа от четырёх цифр',
       '1_000, 12_345, 2_345_999. Уже набранные «1 000» с обычным пробелом тоже становятся неразрывными. ' +
       'Не трогаем: годы («2024 г.», «в ноябре 2026»), дробную часть (3,14159), даты 2024-11-10, ' +
@@ -145,126 +173,106 @@
     ['Аннотация (галочка)',
       'К каждому слою добавляется одна аннотация с флагом «Текст»: текст слоя, где неразрывные пробелы записаны ' +
       'как &nbsp;. Чужие аннотации и аннотации «Текст» с другим содержимым (например, ссылки) не меняются. ' +
-      'При повторном запуске обновляется только аннотация плагина.'],
-    ['Повторы пробелов',
-      'Два и более пробела подряд (обычных и неразрывных) показываются в списке. Нажмите на строку — ' +
-      'слой и фрагмент будут выделены на холсте. Плагин их не удаляет.']
+      'При повторном запуске обновляется только аннотация плагина.']
   ];
 
   function withMarks(parent, str) {
     str.split('_').forEach((part, i) => {
-      if (i) parent.appendChild(el('span', 'nb', '_'));
+      if (i) parent.appendChild(el('span', 'nbm', '_'));
       parent.appendChild(document.createTextNode(part));
     });
   }
 
   function buildHelp() {
-    const root = $('help');
+    const root = $('helpBody');
     const intro = el('div', 'help-intro muted');
-    intro.appendChild(el('span', 'nb', '_'));
+    intro.appendChild(el('span', 'nbm', '_'));
     withMarks(intro, ' — неразрывный пробел. Новые пробелы плагин создаёт только внутри чисел (1000 → 1_000); ' +
-      'во всех остальных случаях обычный пробел заменяется на неразрывный.');
+      'во всех остальных случаях обычный пробел заменяется на неразрывный. Форматирование сохраняется.');
     root.appendChild(intro);
 
     HELP.forEach(([title, text]) => {
       const g = el('div', 'help-group');
       g.appendChild(el('div', 'help-title', title));
-      const t = el('div', 'help-text ex');
+      const t = el('div', 'help-text');
       withMarks(t, text);
       g.appendChild(t);
       root.appendChild(g);
     });
   }
 
-  function toggleHelp(show) {
-    const on = show === undefined ? $('help').hidden : show;
+  function showHelp(on) {
     $('help').hidden = !on;
-    $('main').hidden = on;
-    $('helpBtn').setAttribute('aria-pressed', String(on));
-    window.scrollTo(0, 0);
+    if (on) { $('helpBody').scrollTop = 0; $('helpClose').focus(); }
+    else $('helpLink').focus();
   }
 
-  $('helpBtn').addEventListener('click', () => toggleHelp());
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleHelp(false); });
+  $('helpLink').addEventListener('click', () => showHelp(true));
+  $('helpClose').addEventListener('click', () => showHelp(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('help').hidden) showHelp(false); });
   buildHelp();
 
   // ------------------------------- Основное --------------------------------
-  // Видимые маркеры пробелов: · — обычный, ° — неразрывный
-  const visible = (s) => s.replace(/ /g, '·').replace(/[\u00A0\u202F]/g, '°');
-
   let selCount = 0;
+  let activeKey = '';
 
-  function runNow() {
+  $('run').addEventListener('click', () => {
     $('run').disabled = true;
     post({ type: 'run', annotate: $('annotate').checked });
-  }
-
-  $('run').addEventListener('click', runNow);
-  $('annotate').addEventListener('change', (e) => {
-    post({ type: 'set-annotate', value: e.target.checked });
-    if (e.target.checked && selCount > 0) runNow();
   });
+  $('annotate').addEventListener('change', (e) => post({ type: 'set-annotate', value: e.target.checked }));
 
-  function stat(parent, label, value) {
-    const row = el('div', 'stat');
-    row.appendChild(el('span', 'muted', label));
-    row.appendChild(el('b', '', String(value)));
-    parent.appendChild(row);
+  function group(root, kind, title, g, multi) {
+    if (!g.places) return;
+    const box = el('section', 'grp ' + kind);
+    const head = el('div', 'grp-head');
+    head.appendChild(el('span', 'grp-title', title));
+    head.appendChild(el('span', 'cnt', layers(g.nodes) + ' · ' + places(g.places)));
+    box.appendChild(head);
+
+    let lastId = null;
+    const frag = document.createDocumentFragment();
+    g.items.forEach((it) => {
+      if (multi && it.id !== lastId) {
+        frag.appendChild(el('div', 'node', it.name));
+        lastId = it.id;
+      }
+      const key = kind + ':' + it.id + ':' + it.s;
+      const b = el('button', 'row');
+      b.type = 'button';
+      b.title = 'Показать в слое «' + it.name + '»';
+      if (key === activeKey) b.setAttribute('aria-current', 'true');
+      it.sn.forEach((p, i) => {
+        if (i % 2) b.appendChild(el('mark', kind, p));
+        else if (p) b.appendChild(document.createTextNode(p));
+      });
+      b.addEventListener('click', () => {
+        const prev = document.querySelector('.row[aria-current]');
+        if (prev) prev.removeAttribute('aria-current');
+        b.setAttribute('aria-current', 'true');
+        activeKey = key;
+        post({ type: 'focus', id: it.id, s: it.s, e: it.e });
+      });
+      frag.appendChild(b);
+    });
+    box.appendChild(frag);
+    if (g.places > g.items.length) {
+      box.appendChild(el('div', 'more muted', 'Показаны первые ' + g.items.length + ' из ' + g.places));
+    }
+    root.appendChild(box);
   }
 
-  function render(r) {
-    const root = $('result');
+  function render(m) {
+    const root = $('issues');
     root.textContent = '';
-    if (r.total === 0) return;
-
-    // Сводка
-    const sum = el('div', 'card section');
-    sum.appendChild(el('div', 'head', 'Результат'));
-    stat(sum, 'Обработано слоёв', r.total);
-    stat(sum, 'Изменено слоёв', r.changedNodes);
-    stat(sum, 'Поставлено неразрывных пробелов', r.nbspPlaced);
-    if (r.annotate) {
-      stat(sum, 'Аннотации: добавлено', r.annotations.added);
-      stat(sum, 'Аннотации: обновлено', r.annotations.updated);
-      stat(sum, 'Аннотации: без изменений', r.annotations.same);
+    if (!m.count) return;
+    if (!m.nbsp.places && !m.dups.places) {
+      root.appendChild(el('div', 'ok', 'Всё в порядке: неразрывные пробелы на месте, повторов нет'));
+      return;
     }
-    root.appendChild(sum);
-
-    // Повторы пробелов
-    if (r.dupTotal) {
-      const box = el('div', 'warn section');
-      box.appendChild(el('div', 'head',
-        'Повторяющиеся пробелы: ' + r.dupTotal + ' ' + plural(r.dupTotal, 'место', 'места', 'мест')));
-      box.appendChild(el('div', 'muted', 'Нажмите на строку, чтобы выделить фрагмент в слое.'));
-
-      r.dups.forEach((d) => {
-        const b = el('button', 'dup-item');
-        b.type = 'button';
-        b.appendChild(el('div', 'dup-name', d.nodeName));
-        const ctx = el('div', 'ctx');
-        ctx.appendChild(document.createTextNode(visible(d.before)));
-        ctx.appendChild(el('mark', '', visible(d.dup)));
-        ctx.appendChild(document.createTextNode(visible(d.after)));
-        b.appendChild(ctx);
-        b.addEventListener('click', () => post({ type: 'focus', nodeId: d.nodeId, start: d.start, end: d.end }));
-        box.appendChild(b);
-      });
-      if (r.dupTotal > r.dups.length) {
-        box.appendChild(el('div', 'muted legend', 'Показаны первые ' + r.dups.length + '.'));
-      }
-      box.appendChild(el('div', 'muted legend', '· — обычный пробел, ° — неразрывный'));
-      root.appendChild(box);
-    } else {
-      root.appendChild(el('div', 'ok section', 'Повторяющихся пробелов не найдено'));
-    }
-
-    // Пропущенные слои / ошибки
-    if (r.skipped.length) {
-      const box = el('div', 'card section');
-      box.appendChild(el('div', 'head', 'Не обработано'));
-      r.skipped.forEach((s) => box.appendChild(el('div', 'skip', s.name + ' — ' + s.reason)));
-      root.appendChild(box);
-    }
+    const multi = m.count > 1;
+    group(root, 'nb', 'Не хватает неразрывных пробелов', m.nbsp, multi);
+    group(root, 'dup', 'Повторяющиеся пробелы', m.dups, multi);
   }
 
   window.onmessage = (ev) => {
@@ -272,15 +280,15 @@
     if (!m) return;
     if (m.type === 'init') {
       $('annotate').checked = !!m.annotate;
-    } else if (m.type === 'selection') {
+    } else if (m.type === 'issues') {
       selCount = m.count;
       $('sel').textContent = m.count
         ? 'Выделено текстовых слоёв: ' + m.count
         : 'Выделите текстовый слой (или фрейм с текстами)';
       $('run').disabled = m.count === 0;
-    } else if (m.type === 'report') {
-      $('run').disabled = selCount === 0;
       render(m);
+    } else if (m.type === 'done') {
+      $('run').disabled = selCount === 0;
     }
   };
 

@@ -5,7 +5,6 @@
 const NBSP = '\u00A0';
 const DATA_KEY = 'nbspAnnotationLabel'; // последний текст аннотации, созданной плагином
 const CATEGORY_LABEL = 'Текст'; // флаг (категория) аннотации
-const MAX_DUPS_SHOWN = 200;
 
 figma.skipInvisibleInstanceChildren = true; // быстрее обход и поиск текстовых слоёв
 
@@ -236,6 +235,56 @@ function computeOps(text) {
   return { replace, insert };
 }
 
+// ------------------------- Повторяющиеся пробелы ---------------------------
+
+/**
+ * Группы из двух и более пробелов → один пробел.
+ * Остаётся первый неразрывный (NBSP или U+202F) из группы, если он есть, иначе первый пробел.
+ * dels — диапазоны [start, end) для удаления, по возрастанию; runs — число групп.
+ */
+function collapseDups(text) {
+  const dels = [];
+  let runs = 0;
+  each(DUP_RE, text, (m) => {
+    runs++;
+    const s = m.index;
+    const e = s + m[0].length;
+    let k = m[0].search(/[\u00A0\u202F]/);
+    if (k < 0) k = 0;
+    if (k > 0) dels.push([s, s + k]);
+    if (k + 1 < m[0].length) dels.push([s + k + 1, e]);
+  });
+  if (!runs) return { text, dels, runs };
+  let out = '';
+  let pos = 0;
+  for (const [s, e] of dels) {
+    out += text.slice(pos, s);
+    pos = e;
+  }
+  return { text: out + text.slice(pos), dels, runs };
+}
+
+// Операции computeOps списком [индекс, 0 — замена | 1 — вставка], с конца строки
+function opsList(ops) {
+  const list = [];
+  ops.replace.forEach((i) => list.push([i, 0]));
+  ops.insert.forEach((i) => list.push([i, 1]));
+  return list.sort((a, b) => b[0] - a[0]);
+}
+
+function applyList(text, list) {
+  let t = text;
+  for (const [i, kind] of list) t = t.slice(0, i) + NBSP + t.slice(i + (kind ? 0 : 1));
+  return t;
+}
+
+/** Полная обработка строки (то же, что делает кнопка): повторы → один пробел, затем NBSP. */
+function fixText(text) {
+  const c = collapseDups(text);
+  const list = opsList(computeOps(c.text));
+  return { text: applyList(c.text, list), nbsp: list.length, dups: c.runs };
+}
+
 // ------------------------ Правка текста с сохранением стилей ----------------
 
 const loadedFonts = new Set();
@@ -245,12 +294,11 @@ const UNIFORM_FIELDS = [
   'fills', 'textStyleId', 'fillStyleId', 'hyperlink', 'listOptions', 'indentation'
 ];
 
-async function applyOps(node, ops) {
-  const list = [];
-  ops.replace.forEach((i) => list.push([i, 0]));
-  ops.insert.forEach((i) => list.push([i, 1]));
-  if (!list.length) return 0;
-  list.sort((a, b) => b[0] - a[0]); // с конца, чтобы индексы не сдвигались
+async function fixNode(node) {
+  const c = collapseDups(node.characters);
+  const list = opsList(computeOps(c.text));
+  const edits = list.length + c.dels.length;
+  if (!edits) return { nbsp: 0, dups: 0 };
 
   let segs;
   let full = true;
@@ -267,25 +315,24 @@ async function applyOps(node, ops) {
     loadedFonts.add(key);
   }
 
-  if (full && segs.length === 1 && list.length > 2) {
+  if (full && segs.length === 1 && edits > 2) {
     // Быстрый путь: стиль един по всему слою — одна запись вместо десятков вставок и удалений
-    let t = node.characters;
-    for (const [i, kind] of list) t = t.slice(0, i) + NBSP + t.slice(i + (kind ? 0 : 1));
-    node.characters = t;
-    return list.length;
-  }
-
-  // Общий путь: правим по символу, сохраняя стили фрагментов
-  for (const [i, kind] of list) {
-    if (kind === 0) {
-      node.insertCharacters(i, NBSP, 'AFTER'); // со стилем исходного пробела
-      node.deleteCharacters(i + 1, i + 2);
-    } else {
-      node.insertCharacters(i, NBSP, 'BEFORE');
+    node.characters = applyList(c.text, list);
+  } else {
+    // Общий путь: правим по символу, сохраняя стили фрагментов
+    for (let j = c.dels.length - 1; j >= 0; j--) node.deleteCharacters(c.dels[j][0], c.dels[j][1]);
+    for (const [i, kind] of list) {
+      if (kind === 0) {
+        node.insertCharacters(i, NBSP, 'AFTER'); // со стилем исходного пробела
+        node.deleteCharacters(i + 1, i + 2);
+      } else {
+        node.insertCharacters(i, NBSP, 'BEFORE');
+      }
     }
   }
-  return list.length;
+  return { nbsp: list.length, dups: c.runs };
 }
+
 
 // ------------------------------- Аннотации ---------------------------------
 
@@ -362,6 +409,150 @@ async function syncAnnotation(node, finalText) {
   return 'added';
 }
 
+
+// ------------------------- Проверка выделения ------------------------------
+
+const MAX_SHOWN = 100; // мест в каждом списке окна; остальные только считаются
+const CTX = 18; // символов контекста слева и справа во фрагменте
+const GROUP_GAP = 3; // правки ближе этого расстояния показываются одним местом («А._С._Пушкин»)
+const NBSP_MARK = '_';
+
+const LINE_BREAKS = new RegExp('[\n\r' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
+const oneLine = (s) => s.replace(LINE_BREAKS, '↵').replace(/\t/g, ' ');
+const visible = (s) => s.replace(/ /g, '·').replace(/[\u00A0\u202F]/g, '°');
+
+/**
+ * Короткий фрагмент вокруг [s, e) с отметками.
+ * marks: [позиция, длина, повтор?]; длина 0 — неразрывный пробел вставляется между символами.
+ * Результат — массив строк: чётные элементы — текст, нечётные — отметки.
+ */
+function snippet(text, s, e, marks) {
+  let from = s - CTX;
+  let to = e + CTX;
+  if (from <= 0) from = 0;
+  else {
+    const k = text.indexOf(' ', from);
+    if (k >= 0 && k < s - 1) from = k + 1; // начинаем с целого слова
+  }
+  if (to >= text.length) to = text.length;
+  else {
+    const k = text.lastIndexOf(' ', to);
+    if (k > e) to = k;
+  }
+  const parts = [from > 0 ? '…' : ''];
+  let pos = from;
+  for (const [p, len, dup] of marks) {
+    parts[parts.length - 1] += oneLine(text.slice(pos, p));
+    parts.push(dup ? visible(text.slice(p, p + len)) : NBSP_MARK);
+    parts.push('');
+    pos = p + len;
+  }
+  parts[parts.length - 1] += oneLine(text.slice(pos, to)) + (to < text.length ? '…' : '');
+  return parts;
+}
+
+function analyzeNode(node, res) {
+  const text = node.characters;
+  if (!text) return;
+  const item = (s, e, marks) => ({ id: node.id, name: node.name, s, e, sn: snippet(text, s, e, marks) });
+
+  // Повторяющиеся пробелы: каждая группа — одно место, выделяются сами пробелы
+  let found = 0;
+  each(DUP_RE, text, (m) => {
+    found++;
+    if (res.dups.items.length < MAX_SHOWN) {
+      res.dups.items.push(item(m.index, m.index + m[0].length, [[m.index, m[0].length, true]]));
+    }
+  });
+  if (found) {
+    res.dups.nodes++;
+    res.dups.places += found;
+  }
+
+  // Недостающие неразрывные пробелы: соседние правки объединяются в одно место
+  const o = computeOps(text);
+  if (!o.replace.size && !o.insert.size) return;
+  const ops = [];
+  o.replace.forEach((i) => ops.push([i, 1, false]));
+  o.insert.forEach((i) => ops.push([i, 0, false]));
+  ops.sort((a, b) => a[0] - b[0]);
+  res.nbsp.nodes++;
+
+  let group = [ops[0]];
+  const flush = () => {
+    res.nbsp.places++;
+    if (res.nbsp.items.length >= MAX_SHOWN) return;
+    const first = group[0][0];
+    const last = group[group.length - 1];
+    // Выделяем слова по обе стороны — так место заметнее на холсте
+    let s = first;
+    let e = last[0] + last[1];
+    while (s > 0 && first - s < 40 && !/\s/.test(text[s - 1])) s--;
+    while (e < text.length && e - last[0] < 40 && !/\s/.test(text[e])) e++;
+    res.nbsp.items.push(item(s, e, group));
+  };
+  for (let j = 1; j < ops.length; j++) {
+    if (ops[j][0] - ops[j - 1][0] <= GROUP_GAP) group.push(ops[j]);
+    else {
+      flush();
+      group = [ops[j]];
+    }
+  }
+  flush();
+}
+
+// Набор слоёв, который показан в окне. Не сбрасывается, когда плагин сам выделяет слой по клику в списке.
+let scope = [];
+let pinnedId = null;
+
+function analyze() {
+  scope = scope.filter((n) => !n.removed);
+  const res = {
+    type: 'issues',
+    count: scope.length,
+    nbsp: { nodes: 0, places: 0, items: [] },
+    dups: { nodes: 0, places: 0, items: [] }
+  };
+  for (const node of scope) {
+    try {
+      analyzeNode(node, res);
+    } catch (e) {
+      /* слой недоступен — пропускаем */
+    }
+  }
+  figma.ui.postMessage(res);
+}
+
+let timer = null;
+let needCollect = false;
+
+// Выделение и правки текста меняются часто — пересчитываем не чаще раза в 120 мс
+function schedule(collect) {
+  if (collect) needCollect = true;
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(() => {
+    timer = null;
+    if (needCollect) {
+      scope = collectTextNodes();
+      needCollect = false;
+    }
+    analyze();
+  }, 120);
+}
+
+function onNodeChange(ev) {
+  if (busy || !scope.length) return;
+  const ids = new Set(scope.map((n) => n.id));
+  if (ev.nodeChanges.some((c) => ids.has(c.id))) schedule(false);
+}
+
+let watchedPage = null;
+function watchPage() {
+  if (watchedPage) watchedPage.off('nodechange', onNodeChange);
+  watchedPage = figma.currentPage;
+  watchedPage.on('nodechange', onNodeChange);
+}
+
 // ------------------------------- Основной цикл -----------------------------
 
 function collectTextNodes() {
@@ -380,98 +571,83 @@ async function run(annotate) {
   busy = true;
   categoryCache = null;
 
-  const report = {
-    type: 'report',
-    annotate: !!annotate,
-    total: 0,
-    changedNodes: 0,
-    nbspPlaced: 0,
-    annotations: { added: 0, updated: 0, same: 0, failed: 0 },
-    dupTotal: 0,
-    dups: [],
-    skipped: []
-  };
+  const nodes = scope.filter((n) => !n.removed);
+  let changed = 0;
+  let nbsp = 0;
+  let dups = 0;
+  let noFont = 0;
+  let failed = 0;
+  let annFailed = 0;
 
   try {
-    const nodes = collectTextNodes();
-    report.total = nodes.length;
-
     for (const node of nodes) {
       try {
         if (node.hasMissingFont) {
-          report.skipped.push({ name: node.name, reason: 'в слое есть недоступные шрифты' });
+          noFont++;
           continue;
         }
+        const r = await fixNode(node);
+        if (r.nbsp || r.dups) changed++;
+        nbsp += r.nbsp;
+        dups += r.dups;
 
-        // 1. Неразрывные пробелы
-        const count = await applyOps(node, computeOps(node.characters));
-        if (count > 0) {
-          report.changedNodes++;
-          report.nbspPlaced += count;
-        }
-        const text = node.characters;
-
-        // 2. Повторяющиеся пробелы
-        each(DUP_RE, text, (m) => {
-          report.dupTotal++;
-          if (report.dups.length >= MAX_DUPS_SHOWN) return;
-          const start = m.index;
-          const end = start + m[0].length;
-          const from = Math.max(0, start - 14);
-          const to = Math.min(text.length, end + 14);
-          report.dups.push({
-            nodeId: node.id,
-            nodeName: node.name,
-            start,
-            end,
-            before: (from > 0 ? '…' : '') + text.slice(from, start),
-            dup: m[0],
-            after: text.slice(end, to) + (to < text.length ? '…' : '')
-          });
-        });
-
-        // 3. Аннотация
-        if (annotate && text.trim()) {
+        if (annotate && node.characters.trim()) {
           try {
-            report.annotations[await syncAnnotation(node, text)]++;
+            await syncAnnotation(node, node.characters);
           } catch (e) {
-            report.annotations.failed++;
-            report.skipped.push({ name: node.name, reason: 'аннотация не создана: ' + String((e && e.message) || e) });
+            annFailed++;
           }
         }
       } catch (e) {
-        report.skipped.push({ name: node.name, reason: String((e && e.message) || e) });
+        failed++;
       }
     }
   } finally {
     busy = false;
   }
 
-  figma.ui.postMessage(report);
+  figma.ui.postMessage({ type: 'done' });
+  analyze();
 
-  if (report.total === 0) {
+  if (!nodes.length) {
     figma.notify('Выделите хотя бы один текстовый слой');
-  } else {
-    let msg = 'Обработано слоёв: ' + report.total + '. Неразрывных пробелов: ' + report.nbspPlaced;
-    if (report.dupTotal) msg += '. Повторы пробелов: ' + report.dupTotal;
-    figma.notify(msg);
+    return;
   }
+  const msg = [];
+  if (nbsp) msg.push('Неразрывных пробелов: ' + nbsp);
+  if (dups) msg.push('убрано повторов пробелов: ' + dups);
+  if (!changed && !noFont && !failed) msg.push('Всё уже в порядке');
+  if (noFont) msg.push('пропущено слоёв с недоступными шрифтами: ' + noFont);
+  if (failed) msg.push('не удалось обработать слоёв: ' + failed);
+  if (annFailed) msg.push('не создано аннотаций: ' + annFailed);
+  const text = msg.join(', ');
+  figma.notify(text[0].toUpperCase() + text.slice(1), { error: !!(noFont || failed || annFailed) });
 }
 
 // ----------------------------------- UI ------------------------------------
 
-figma.showUI(__html__, { width: 340, height: 520, themeColors: true, title: 'Auto-nbsp' });
+figma.showUI(__html__, { width: 340, height: 480, themeColors: true, title: 'Auto-nbsp' });
 
-const sendSelection = () => figma.ui.postMessage({ type: 'selection', count: collectTextNodes().length });
-figma.on('selectionchange', sendSelection);
+figma.on('selectionchange', () => {
+  const sel = figma.currentPage.selection;
+  if (pinnedId && sel.length === 1 && sel[0].id === pinnedId) return; // это мы выделили слой по клику
+  pinnedId = null;
+  schedule(true);
+});
+figma.on('currentpagechange', () => {
+  watchPage();
+  pinnedId = null;
+  schedule(true);
+});
+watchPage();
 
 figma.ui.onmessage = async (msg) => {
   switch (msg.type) {
     case 'ready': {
       const annotate = (await figma.clientStorage.getAsync('annotate')) === true;
       figma.ui.postMessage({ type: 'init', annotate });
-      sendSelection();
-      if (collectTextNodes().length) await run(annotate);
+      scope = collectTextNodes();
+      analyze();
       break;
     }
     case 'set-annotate':
@@ -481,15 +657,17 @@ figma.ui.onmessage = async (msg) => {
       await run(!!msg.annotate);
       break;
     case 'focus': {
-      const node = await figma.getNodeByIdAsync(msg.nodeId);
-      if (!node || node.type !== 'TEXT') {
+      const node = await figma.getNodeByIdAsync(msg.id);
+      if (!node || node.type !== 'TEXT' || node.removed) {
         figma.notify('Слой не найден — возможно, он был удалён');
         break;
       }
+      pinnedId = node.id;
       figma.currentPage.selection = [node];
       figma.viewport.scrollAndZoomIntoView([node]);
+      const len = node.characters.length;
       try {
-        figma.currentPage.selectedTextRange = { node: node, start: msg.start, end: msg.end };
+        figma.currentPage.selectedTextRange = { node, start: Math.min(msg.s, len), end: Math.min(msg.e, len) };
       } catch (e) {
         figma.notify('Слой выделен, но подсветить фрагмент не удалось');
       }

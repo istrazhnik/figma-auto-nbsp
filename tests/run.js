@@ -1,5 +1,6 @@
 'use strict';
-// Snapshot tests for computeOps (code.js) without Figma. "_" in expected = U+00A0.
+// Snapshot tests for fixText (code.js) without Figma: duplicate spaces collapse + computeOps.
+// "_" in expected = U+00A0.
 // node tests/run.js           → compare
 // node tests/run.js --update  → rewrite expected values (review the diff!)
 const vm = require('vm');
@@ -7,18 +8,14 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const ctx = { figma: { showUI() {}, on() {}, ui: {}, annotations: {} }, __html__: '', console };
+const page = { on() {}, off() {}, selection: [] };
+const ctx = { figma: { showUI() {}, on() {}, ui: {}, annotations: {}, currentPage: page }, __html__: '', console };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(root, 'code.js'), 'utf8'), ctx);
-const computeOps = vm.runInContext('computeOps', ctx);
+const fixText = vm.runInContext('fixText', ctx);
 
-function apply(text) {
-  const o = computeOps(text);
-  const ops = [...o.replace].map((i) => [i, 0]).concat([...o.insert].map((i) => [i, 1])).sort((a, b) => b[0] - a[0]);
-  let s = text;
-  for (const [i, k] of ops) s = s.slice(0, i) + ' ' + s.slice(i + (k ? 0 : 1));
-  return s.replace(/ /g, '_');
-}
+const NB = String.fromCharCode(0xa0);
+const apply = (text) => fixText(text).text.split(NB).join('_');
 
 const file = path.join(__dirname, 'cases.json');
 const cases = JSON.parse(fs.readFileSync(file, 'utf8'));

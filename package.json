@@ -1,0 +1,7 @@
+{
+  "name": "figma-auto-nbsp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Figma plugin: NBSP typography for Russian text",
+  "scripts": { "test": "node tests/run.js" }
+}

@@ -10,5 +10,5 @@ Manual (user): Plugins → Development → Import plugin from manifest → `mani
 - select layers → both lists appear without running; click a row → layer + fragment selected, list stays; edit text → list refreshes
 - text with "в  доме" (2 spaces) → listed under repeated spaces; after the button → "в_доме"
 - layer with missing font → skipped, reported in the notify toast
-Automated (only if the Figma MCP exposes `use_figma` and the user gives a test fileKey): load skill `figma-use` first, create a session, build the layers above, paste `code.js` logic via `use_figma` and read results. Note: `setPluginData` is unsupported there, so annotation re-run lookup falls back to text matching.
+Automated (only if the Figma MCP exposes `use_figma` and the user gives a test fileKey): load skill `figma-use` first, create a session, build the layers above, paste `code.js` logic via `use_figma` and read results. Note: `setPluginData` is unsupported there, so annotation re-run lookup falls back to text matching. MCP limits seen: `selectedTextRange` absent, `figma.notify` throws, annotations denied on a free-plan file, no plugin UI/events — those need the manual run.
 Fix failures in `code.js`, rerun `npm test`, report what was verified vs. not.

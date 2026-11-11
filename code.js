@@ -484,12 +484,9 @@ function analyzeNode(node, res) {
     if (res.nbsp.items.length >= MAX_SHOWN) return;
     const first = group[0][0];
     const last = group[group.length - 1];
-    // Выделяем слова по обе стороны — так место заметнее на холсте
-    let s = first;
-    let e = last[0] + last[1];
-    while (s > 0 && first - s < 40 && !/\s/.test(text[s - 1])) s--;
-    while (e < text.length && e - last[0] < 40 && !/\s/.test(text[e])) e++;
-    res.nbsp.items.push(item(s, e, group));
+    // Выделяем только сами пробелы (от первого до последнего в группе).
+    // Вставка внутри числа — пустой диапазон: курсор встаёт туда, где появится пробел.
+    res.nbsp.items.push(item(first, last[0] + last[1], group));
   };
   for (let j = 1; j < ops.length; j++) {
     if (ops[j][0] - ops[j - 1][0] <= GROUP_GAP) group.push(ops[j]);

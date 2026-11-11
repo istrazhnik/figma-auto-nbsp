@@ -18,7 +18,7 @@ Figma plugin, plain JS, no build. Selected text layers → live list of missing 
 - `computeOps` → `{replace:Set<idx of ' '→NBSP>, insert:Set<idx for new NBSP>}`. New chars only inside digit groups; everything else replaces an existing U+0020.
 - `collapseDups`: each `DUP_RE` run → one char (first NBSP/U+202F in run, else first space); returns delete ranges. `fixNode`: collapse, then `computeOps` on collapsed text; indices descending. Fast path (one uniform style segment, >2 ops) = one `node.characters` write; else per-op `insertCharacters(i,NBSP,'AFTER')`+`deleteCharacters` to keep styles. Fonts cached in `loadedFonts`.
 - Annotations (checkbox "Добавить аннотацию", persisted via clientStorage): category "Текст" reused, created only if missing. Label = text with NBSP→`&nbsp;`. Own annotation found by (1) exact label == pluginData `nbspAnnotationLabel`, (2) same normalized text as stored, (3) normalized == current text. Never touch other annotations (incl. "Текст" with other content, e.g. links); ours is replaced in place or appended; `properties` preserved.
-- Live check: `scope` = text nodes of selection; `analyze()` → `issues` msg {count, nbsp, dups: {nodes, places, items≤100}}. NBSP ops ≤3 chars apart = one place; focus range expanded to whole words; dup place = the run itself. Debounced 120 ms on `selectionchange` and page `nodechange` (re-registered on `currentpagechange`). Click → `focus` sets `pinnedId` so the resulting selectionchange keeps the scope. Run acts on `scope`.
+- Live check: `scope` = text nodes of selection; `analyze()` → `issues` msg {count, nbsp, dups: {nodes, places, items≤100}}. NBSP ops ≤3 chars apart = one place; focus range = exactly the spaces (first..last op; insert-only → empty range = caret); dup place = the run itself. Debounced 120 ms on `selectionchange` and page `nodechange` (re-registered on `currentpagechange`). Click → `focus` sets `pinnedId` so the resulting selectionchange keeps the scope. Run acts on `scope`.
 - No auto-run on launch, checkbox doesn't run anything; results only via `figma.notify` (no result panel in UI).
 - Messages: UI→code `ready|run|set-annotate|focus|resize`; code→UI `init|issues|done`.
 - Window resize: corner grip (`#grip`, UI) → `resize {w,h,save}` (rAF-throttled) → `figma.ui.resize` clamped by `SIZE` (min 300×360); final size saved to clientStorage `size`, restored on launch.
@@ -37,7 +37,8 @@ Figma plugin, plain JS, no build. Selected text layers → live list of missing 
 - No deps, no network. Keep `HELP` (ui.html), README rule list and `tests/cases.json` in sync with `computeOps`.
 - Never run `computeOps`-changing edits without `npm test`.
 - Native Figma UI components don't exist for plugins: UI is HTML mimicking Figma via `--figma-color-*` vars. `figma.parameters` unsuitable (no checkbox/help/results).
-- NOT verified in real Figma: fast path with mixed styles, `selectedTextRange`, `PageNode.on('nodechange')` live refresh, annotation category API (`getAnnotationCategoriesAsync`/`addAnnotationCategoryAsync`, `labelMarkdown`). Use skill `nbsp-figma-verify`.
+- Verified via Figma MCP (2026-11-12, sandbox file): `fixNode` fast path on uniform text, per-char path on mixed styles (bold/fill/link/underline kept), dup collapse incl. kept NBSP, result == `fixText`.
+- NOT verified in real Figma: `selectedTextRange`, `PageNode.on('nodechange')` live refresh, annotation category API (`getAnnotationCategoriesAsync`/`addAnnotationCategoryAsync`, `labelMarkdown`). Use skill `nbsp-figma-verify`.
 
 ## Status
 - On GitHub: private repo `istrazhnik/figma-auto-nbsp`, branch `main` (push with local git/gh; the claude.ai GitHub connector lacks write access).

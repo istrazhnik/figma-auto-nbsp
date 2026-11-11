@@ -77,4 +77,3 @@
 - Тесты логики расстановки без Figma: `npm test` (`tests/cases.json`, `_` — NBSP). Новые эталоны: `npm test -- --update`.
 - Установка в Figma: Plugins → Development → Import plugin from manifest… → `manifest.json`.
 - Контекст для ИИ-агента: `CLAUDE.md`, скиллы в `.claude/skills/`.
-- Не проверено в настоящем Figma: быстрая запись на слоях со смешанным стилем, выделение фрагмента, создание категории аннотаций, обновление списков при правке текста (`nodechange`).

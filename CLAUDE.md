@@ -37,5 +37,5 @@ Figma plugin, plain JS, no build. Selected text layers → Russian NBSP typograp
 - NOT verified in real Figma: fast path with mixed styles, `selectedTextRange`, annotation category API (`getAnnotationCategoriesAsync`/`addAnnotationCategoryAsync`, `labelMarkdown`). Use skill `nbsp-figma-verify`.
 
 ## Status
-- Not yet on GitHub. Target: private repo `istrazhnik/figma-auto-nbsp` (claude.ai GitHub connector lacked create/write access; push with local git/gh: `git init -b main; git add -A; git commit; git remote add origin https://github.com/istrazhnik/figma-auto-nbsp.git; git push -u origin main`).
+- On GitHub: private repo `istrazhnik/figma-auto-nbsp`, branch `main` (push with local git/gh; the claude.ai GitHub connector lacks write access).
 - Ideas (not requested): U+2011 in phone hyphens; UI toggles for dense rules (1–2-letter words, percent, phones).

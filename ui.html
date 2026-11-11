@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <style>
   * { box-sizing: border-box; }
+  /* Figma помечает тему классом на <html> (themeColors: true); системные элементы формы берут тему из color-scheme */
+  html.figma-light { color-scheme: light; }
+  html.figma-dark { color-scheme: dark; }
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -35,8 +38,32 @@
   }
   .link:hover { text-decoration: underline; }
 
-  .check { display: flex; align-items: center; gap: 8px; margin: 10px 0; cursor: pointer; user-select: none; }
-  .check input { margin: 0; width: 14px; height: 14px; accent-color: var(--figma-color-bg-brand, #0d99ff); }
+  /* Галочки в стиле Figma: свои, на цветах темы (системные рисуются светлыми в тёмной теме) */
+  input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none; flex: none; margin: 0; cursor: pointer;
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1px solid var(--figma-color-border, #e5e5e5);
+    /* посередине между обводкой строк и border-strong */
+    border-color: color-mix(in srgb, var(--figma-color-border, #e5e5e5), var(--figma-color-border-strong, #b3b3b3));
+    background: var(--figma-color-bg, #fff) center / 12px 12px no-repeat;
+  }
+  input[type="checkbox"]:checked {
+    border-color: var(--figma-color-bg-brand, #0d99ff);
+    background-color: var(--figma-color-bg-brand, #0d99ff);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 12 12%27%3E%3Cpath d=%27M2.5 6.2l2.3 2.3 4.7-4.9%27 fill=%27none%27 stroke=%27white%27 stroke-width=%271.5%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E");
+  }
+  input[type="checkbox"]:focus-visible { outline: 2px solid var(--figma-color-border-brand-strong, #0d99ff); outline-offset: 1px; }
+
+  /* Блоки с галочками: обводка, отступы, кликабельна вся область */
+  .opt-card { border: 1px solid var(--figma-color-border, #e5e5e5); border-radius: 6px; margin: 10px 0; overflow: hidden; }
+  .opt { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; cursor: pointer; user-select: none; }
+  .opt:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
+  .opt + .opt { border-top: 1px solid var(--figma-color-border, #e5e5e5); }
+  .opt.sub { padding-left: 34px; }
+  .opt-body { min-width: 0; }
+  .help-opt { margin: 8px 0 0; }
+  .gap { height: 10px; }
+  #annotateBox:not([hidden]) + .gap { display: none; }
 
   .primary {
     width: 100%; height: 32px; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600;
@@ -44,7 +71,37 @@
     color: var(--figma-color-text-onbrand, #fff);
   }
   .primary:hover:not(:disabled) { background: var(--figma-color-bg-brand-hover, #0b87e0); }
-  .primary:disabled { opacity: .4; cursor: default; }
+  .primary:disabled {
+    cursor: default;
+    background: var(--figma-color-bg-disabled, #d9d9d9);
+    color: var(--figma-color-text-disabled, #b3b3b3);
+  }
+
+  /* Лоадер по центру окна, пока плагин не получил первые данные */
+  .loader {
+    position: fixed; inset: 0; z-index: 5; display: grid; place-items: center;
+    background: var(--figma-color-bg, #fff);
+  }
+  .spinner {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--figma-color-border, #e5e5e5);
+    border-top-color: var(--figma-color-icon-brand, #0d99ff);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+  /* Тонкие полосы прокрутки, как в интерфейсе Figma */
+  ::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    border: 4px solid transparent; border-radius: 6px; background-clip: padding-box;
+    background-color: var(--figma-color-border, #e5e5e5);
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--figma-color-border, #e5e5e5), var(--figma-color-border-strong, #b3b3b3)); }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--figma-color-border, #e5e5e5) transparent; }
+  }
 
   /* Найденные места */
   .grp { margin-top: 14px; }
@@ -63,21 +120,24 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .row {
-    display: block; width: 100%; height: 28px; padding: 0 8px;
-    text-align: left; line-height: 26px; white-space: pre; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding: 0 4px 0 8px;
+    text-align: left; line-height: 26px; cursor: pointer;
     background: var(--figma-color-bg, #fff); border: 1px solid var(--figma-color-border, #e5e5e5);
-    border-radius: 6px; cursor: pointer;
+    border-radius: 6px;
   }
+  .row-text { flex: 1; min-width: 0; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+  .row-chevron { flex: none; display: grid; place-items: center; width: 16px; height: 16px; color: var(--figma-color-icon-secondary, #666); }
   .row + .row { margin-top: 4px; }
-  .row:hover { border-color: var(--figma-color-border-strong, #b3b3b3); }
+  .row:hover { border-color: var(--figma-color-border-selected, #0d99ff); } /* фон не меняется, только голубая обводка */
+  /* Строка, по которой перешли; подсветка снимается, когда снято выделение её слоя */
   .row[aria-current="true"] {
     background: var(--figma-color-bg-selected, #e5f4ff);
     border-color: var(--figma-color-border-selected, #0d99ff);
   }
   .row:focus-visible { outline: 2px solid var(--figma-color-border-brand-strong, #0d99ff); outline-offset: -2px; }
   mark { border-radius: 2px; padding: 0 1px; font-weight: 700; }
-  mark.nb { background: var(--figma-color-bg-brand-tertiary, #e5f4ff); color: var(--figma-color-text-brand, #0d99ff); }
-  mark.dup { background: var(--figma-color-bg-danger-tertiary, #ffe2e0); color: var(--figma-color-text-danger, #f24822); }
+  /* Отметки пробелов в строках: одинаково красные для обоих списков */
+  mark.nb, mark.dup { background: var(--figma-color-bg-danger-tertiary, #ffe2e0); color: var(--figma-color-text-danger, #f24822); }
   .more { margin-top: 2px; }
   .ok { margin-top: 14px; color: var(--figma-color-text-success, #14ae5c); }
 
@@ -103,21 +163,47 @@
   .help-title { font-weight: 600; }
   .help-text { margin-top: 2px; white-space: pre-wrap; word-break: break-word; color: var(--figma-color-text-secondary, #666); }
   .nbm { color: var(--figma-color-text-brand, #0d99ff); font-weight: 700; }
+  .help-section {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    margin-top: 16px; padding-top: 12px; font-weight: 600; font-size: 12px;
+    border-top: 1px solid var(--figma-color-border, #e5e5e5);
+  }
+  .help-section .link { font-size: 11px; font-weight: 400; }
+  .help-note { margin-top: 2px; }
+  .foot-left { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .link-muted { color: var(--figma-color-text-secondary, #666); white-space: nowrap; }
+  /* Место под полосу прокрутки зарезервировано (scrollbar-gutter), поэтому контент не сдвигается.
+     Правый отступ убран: полосу шириной 12px занимает место отступа, визуально слева и справа по 12px. */
+  @supports (scrollbar-gutter: stable) {
+    .main, .overlay-body { scrollbar-gutter: stable; padding-right: 0; }
+  }
 </style>
 </head>
 <body>
+  <div id="loader" class="loader" role="status" aria-label="Загрузка"><span class="spinner"></span></div>
   <main class="main">
-    <div id="sel" class="muted">Загрузка…</div>
-    <label class="check">
-      <input type="checkbox" id="annotate">
-      <span>Добавить аннотацию</span>
-    </label>
+    <div id="sel" class="muted"></div>
+    <!-- Скрывается, только если в Figma нет API аннотаций; тариф плагин узнать не может -->
+    <div id="annotateBox" class="opt-card" hidden>
+      <label class="opt">
+        <input type="checkbox" id="annotate">
+        <span>Добавить аннотацию <span class="muted">· нужен платный план Figma</span></span>
+      </label>
+      <label id="annotateAllRow" class="opt sub" hidden>
+        <input type="checkbox" id="annotateAll">
+        <span>Даже если в тексте нет неразрывных пробелов</span>
+      </label>
+    </div>
+    <div class="gap"></div>
     <button id="run" class="primary" type="button" disabled>Расставить неразрывные пробелы</button>
     <div id="issues"></div>
   </main>
 
   <footer class="foot">
-    <button id="helpLink" class="link" type="button">Как работает плагин</button>
+    <div class="foot-left">
+      <button id="helpLink" class="link" type="button">Как работает плагин</button>
+      <button id="rulesOff" class="link link-muted" type="button" title="Открыть настройки правил" hidden></button>
+    </div>
     <span class="ver muted" title="Версия плагина">v1.0.0</span>
   </footer>
   <div id="grip" class="grip" title="Потяните, чтобы изменить размер окна" aria-hidden="true">
@@ -160,43 +246,69 @@
 
   // ------------------------------- Справка ---------------------------------
   // «_» в примерах — неразрывный пробел. Список нужно держать в соответствии с code.js.
+  // Пункт: [заголовок, текст, ключ выключаемого правила (DEFAULT_RULES в code.js) или null].
+  // Раздел с only: 'annotations' показывается, только если в Figma есть API аннотаций.
   const HELP = [
-    ['Проверка выделения',
-      'Сразу при выделении слоёв (или фрейма с текстами) плагин показывает, где не хватает неразрывных пробелов ' +
-      'и где стоят повторяющиеся пробелы. Нажмите на строку — слой и фрагмент будут выделены на холсте. ' +
-      'Текст меняется только по кнопке «Расставить неразрывные пробелы».'],
-    ['Повторяющиеся пробелы',
-      'При нажатии на кнопку два и более пробела подряд заменяются одним. Если среди них был неразрывный, остаётся он. ' +
-      'Оставшийся пробел становится неразрывным, если этого требуют правила ниже: «в  доме» → в_доме, «Он  пришёл» → Он_пришёл.'],
-    ['Числа от четырёх цифр',
-      '1_000, 12_345, 2_345_999. Уже набранные «1 000» с обычным пробелом тоже становятся неразрывными. ' +
-      'Не трогаем: годы («2024 г.», «в ноябре 2026»), дробную часть (3,14159), даты 2024-11-10, ' +
-      'идентификаторы (ID12345), числа с нуля (0123).'],
-    ['Единицы после числа',
-      '5_лет, 3_месяца, 10_сек, 2024_г., 100_000_руб., 5_тыс._руб., 500_г, 20_°C, 5_м².'],
-    ['Проценты',
-      '20_% — только если пробел перед знаком уже был. «20%» остаётся как есть. То же для ‰.'],
-    ['Предлоги и союзы',
-      'в_списке, первый и_второй, потому_что_хотел, потому,_что_хотел, для_того,_чтобы, так_как.'],
-    ['Частицы «не», «ни», «вот», «вон», «ну», «уж», «то»',
-      'Прижимаются к следующему слову: не_пошёл, вот_он.'],
-    ['Частицы «бы», «ли», «же»',
-      'Прижимаются к предыдущему слову: я_бы пошёл, знаешь_ли, он_же ушёл. После них пробел обычный.'],
-    ['Короткие слова (1–2 буквы)',
-      'я_пришёл, а_он, мы_ушли.'],
-    ['Даты', '10_ноября_2026_г., в_ноябре_2026.'],
-    ['Инициалы', 'А._С._Пушкин, Пушкин_А._С.'],
-    ['Сокращения', 'т._е., и_т._д., и_т._п., в_т._ч.'],
-    ['Номера и ссылки', '№_5, §_3, ст._12, п._4, рис._2, табл._1, гл._3.'],
-    ['Адреса', 'г._Москва, ул._Ленина,_д._5,_кв._12. После запятой перед д., кв., оф., корп., эт., стр. пробел тоже неразрывный.'],
-    ['Тире', 'Рынок_— это важно. Неразрывный пробел перед тире, после тире обычный.'],
-    ['Телефоны', '+7_(495)_123-45-67, 8_800_555-35-35. Дефисы остаются обычными.'],
-    ['Римские цифры и век', 'XXI_век, в_XX_в.'],
-    ['Аннотация (галочка)',
-      'К каждому слою добавляется одна аннотация с флагом «Текст»: текст слоя, где неразрывные пробелы записаны ' +
-      'как &nbsp;. Чужие аннотации и аннотации «Текст» с другим содержимым (например, ссылки) не меняются. ' +
-      'При повторном запуске обновляется только аннотация плагина.']
+    { title: 'Как это работает', items: [
+      ['Проверка выделения',
+        'Сразу при выделении слоёв (или фрейма с текстами) плагин показывает, где не хватает неразрывных пробелов ' +
+        'и где стоят повторяющиеся пробелы. Нажмите на строку — слой и фрагмент будут выделены на холсте. ' +
+        'Текст меняется только по кнопке «Расставить неразрывные пробелы».']
+    ] },
+    { title: 'Настраиваемые правила', settings: true, items: [
+      ['Четырёхзначные числа',
+        '1_000, 2_500. Если выключить, остаются слитно: 1000. Уже набранные «1 000» всё равно связываются.',
+        'fourDigit'],
+      ['Короткие слова (1–2 буквы)',
+        'я_пришёл, мы_ушли, он_ушёл. Предлоги, союзы и частицы из 1–2 букв (в, и, а, не) связываются всегда.',
+        'shortWords'],
+      ['Тире', 'Рынок_— это важно. Неразрывный пробел перед тире, после тире обычный.', 'dash'],
+      ['Повторяющиеся пробелы',
+        'При нажатии на кнопку два и более пробела подряд заменяются одним. Если среди них был неразрывный, остаётся он. ' +
+        'Оставшийся пробел становится неразрывным, если этого требуют правила: «в  доме» → в_доме. ' +
+        'Если выключить, повторы не исправляются и не показываются в окне.',
+        'dups']
+    ] },
+    { title: 'Всегда включены', items: [
+      ['Числа от пяти цифр',
+        '12_345, 2_345_999. Уже набранные «12 345» с обычным пробелом тоже становятся неразрывными. ' +
+        'Не трогаем: годы («2024 г.», «в ноябре 2026»), дробную часть (3,14159), даты 2024-11-10, ' +
+        'идентификаторы (ID12345), числа с нуля (0123), реквизиты (ИНН 7702045051, КПП, ОГРН, БИК, р/с) ' +
+        'и почтовые индексы (адрес — 115432, г. Москва).'],
+      ['Единицы после числа',
+        '5_лет, 3_месяца, 10_сек, 2024_г., 100_000_руб., 5_тыс._руб., 500_г, 20_°C, 5_м².'],
+      ['Проценты',
+        '20_% — только если пробел перед знаком уже был. «20%» остаётся как есть. То же для ‰.'],
+      ['Предлоги и союзы',
+        'в_списке, первый и_второй, потому_что_хотел, потому,_что_хотел, для_того,_чтобы, так_как. ' +
+        '«Что» и «чем» после предлога — местоимения, после них пробел обычный: с_чем вы, о_чём вы, за_что вы.'],
+      ['Частицы «не», «ни», «вот», «вон», «ну», «уж», «то»',
+        'Прижимаются к следующему слову: не_пошёл, вот_он.'],
+      ['Частицы «бы», «ли», «же»',
+        'Прижимаются к предыдущему слову: я_бы пошёл, знаешь_ли, он_же ушёл. После них пробел обычный.'],
+      ['Даты', '10_ноября_2026_г., в_ноябре_2026.'],
+      ['Инициалы', 'А._С._Пушкин, Пушкин_А._С.'],
+      ['Сокращения', 'т._е., и_т._д., и_т._п., в_т._ч.'],
+      ['Номера и ссылки', '№_5, §_3, ст._12, п._4, рис._2, табл._1, гл._3.'],
+      ['Адреса', 'г._Москва, ул._Ленина,_д._5,_кв._12. После запятой перед д., кв., оф., корп., эт., стр. пробел тоже неразрывный.'],
+      ['Телефоны', '+7_(495)_123-45-67, 8_800_555-35-35. Дефисы остаются обычными.'],
+      ['Римские цифры и век', 'XXI_век, в_XX_в.']
+    ] },
+    { title: 'Аннотации', only: 'annotations', items: [
+      ['Галочка «Добавить аннотацию»',
+        'К каждому слою добавляется одна аннотация с флагом «Текст»: текст слоя, где неразрывные пробелы записаны ' +
+        'как &nbsp;. Чужие аннотации и аннотации «Текст» с другим содержимым (например, ссылки) не меняются. ' +
+        'При повторном запуске обновляется только аннотация плагина. Аннотация добавляется только к тексту с неразрывными ' +
+        'пробелами; вторая галочка «Даже если в тексте нет неразрывных пробелов» добавляет её ко всем слоям. ' +
+        'Аннотации видны только на платных планах Figma.']
+    ] }
   ];
+
+  // Настройки правил пользователя: приходят в init, меняются галочками в справке
+  let rules = {};
+  let defaultRules = {};
+  let withAnnotations = false;
+  const offCount = () => Object.keys(defaultRules).filter((k) => rules[k] === false).length;
 
   function withMarks(parent, str) {
     str.split('_').forEach((part, i) => {
@@ -205,31 +317,87 @@
     });
   }
 
+  function updateRulesMarks() {
+    const n = offCount();
+    $('rulesOff').hidden = n === 0;
+    $('rulesOff').textContent = 'Отключено правил: ' + n;
+    const reset = $('rulesReset');
+    if (reset) reset.hidden = n === 0;
+  }
+
+  function setRule(key, on) {
+    rules[key] = on;
+    post({ type: 'set-rules', rules });
+    updateRulesMarks();
+  }
+
   function buildHelp() {
     const root = $('helpBody');
+    root.textContent = '';
     const intro = el('div', 'help-intro muted');
     intro.appendChild(el('span', 'nbm', '_'));
     withMarks(intro, ' — неразрывный пробел. Новые пробелы плагин создаёт только внутри чисел (1000 → 1_000); ' +
       'во всех остальных случаях обычный пробел заменяется на неразрывный. Форматирование сохраняется.');
     root.appendChild(intro);
 
-    HELP.forEach(([title, text]) => {
-      const g = el('div', 'help-group');
-      g.appendChild(el('div', 'help-title', title));
-      const t = el('div', 'help-text');
-      withMarks(t, text);
-      g.appendChild(t);
-      root.appendChild(g);
+    HELP.forEach((sec) => {
+      if (sec.only === 'annotations' && !withAnnotations) return;
+      const head = el('div', 'help-section');
+      head.id = sec.settings ? 'helpSettings' : '';
+      head.appendChild(el('span', '', sec.title));
+      if (sec.settings) {
+        const reset = el('button', 'link', 'Вернуть по умолчанию');
+        reset.type = 'button';
+        reset.id = 'rulesReset';
+        reset.addEventListener('click', () => {
+          rules = Object.assign({}, defaultRules);
+          post({ type: 'set-rules', rules });
+          buildHelp();
+          updateRulesMarks();
+        });
+        head.appendChild(reset);
+      }
+      root.appendChild(head);
+      if (sec.settings) root.appendChild(el('div', 'help-note muted', 'Настройки сохраняются только у вас и действуют во всех файлах.'));
+
+      sec.items.forEach(([title, text, key]) => {
+        const t = el('div', 'help-text');
+        withMarks(t, text);
+        if (key) {
+          // Выключаемое правило — карточка с галочкой, кликабельна целиком
+          const card = el('label', 'opt opt-card help-opt');
+          const cb = el('input');
+          cb.type = 'checkbox';
+          cb.checked = rules[key] !== false;
+          cb.addEventListener('change', () => setRule(key, cb.checked));
+          const body = el('div', 'opt-body');
+          body.appendChild(el('div', 'help-title', title));
+          body.appendChild(t);
+          card.appendChild(cb);
+          card.appendChild(body);
+          root.appendChild(card);
+          return;
+        }
+        const g = el('div', 'help-group');
+        g.appendChild(el('div', 'help-title', title));
+        g.appendChild(t);
+        root.appendChild(g);
+      });
     });
+    updateRulesMarks();
   }
 
-  function showHelp(on) {
+  function showHelp(on, toSettings) {
     $('help').hidden = !on;
-    if (on) { $('helpBody').scrollTop = 0; $('helpClose').focus(); }
-    else $('helpLink').focus();
+    if (on) {
+      const target = toSettings && $('helpSettings');
+      $('helpBody').scrollTop = target ? target.offsetTop - $('helpBody').offsetTop - 8 : 0;
+      $('helpClose').focus();
+    } else $('helpLink').focus();
   }
 
   $('helpLink').addEventListener('click', () => showHelp(true));
+  $('rulesOff').addEventListener('click', () => showHelp(true, true));
   $('helpClose').addEventListener('click', () => showHelp(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('help').hidden) showHelp(false); });
   buildHelp();
@@ -240,9 +408,37 @@
 
   $('run').addEventListener('click', () => {
     $('run').disabled = true;
-    post({ type: 'run', annotate: $('annotate').checked });
+    const canAnnotate = !$('annotateBox').hidden;
+    post({ type: 'run', annotate: canAnnotate && $('annotate').checked, annotateAll: $('annotateAll').checked });
   });
-  $('annotate').addEventListener('change', (e) => post({ type: 'set-annotate', value: e.target.checked }));
+  // Вторая галочка видна только при включённой аннотации
+  const syncAnnotateAll = () => { $('annotateAllRow').hidden = !$('annotate').checked; };
+  $('annotate').addEventListener('change', (e) => {
+    syncAnnotateAll();
+    post({ type: 'set-annotate', value: e.target.checked });
+  });
+  $('annotateAll').addEventListener('change', (e) => post({ type: 'set-annotate-all', value: e.target.checked }));
+
+  // Шеврон справа в строке — подсказка, что по строке можно перейти
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function chevron() {
+    const wrap = el('span', 'row-chevron');
+    wrap.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M6.5 4.5L10 8l-3.5 3.5');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.2');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    wrap.appendChild(svg);
+    return wrap;
+  }
 
   function group(root, kind, title, g) {
     if (!g.places) return;
@@ -265,12 +461,15 @@
       const key = kind + ':' + it.id + ':' + it.s;
       const b = el('button', 'row');
       b.type = 'button';
-      b.title = 'Показать в слое «' + it.name + '»';
+      b.setAttribute('aria-label', 'Показать в слое «' + it.name + '»');
       if (key === activeKey) b.setAttribute('aria-current', 'true');
+      const txt = el('span', 'row-text');
       it.sn.forEach((p, i) => {
-        if (i % 2) b.appendChild(el('mark', kind, p));
-        else if (p) b.appendChild(document.createTextNode(p));
+        if (i % 2) txt.appendChild(el('mark', kind, p));
+        else if (p) txt.appendChild(document.createTextNode(p));
       });
+      b.appendChild(txt);
+      b.appendChild(chevron());
       b.addEventListener('click', () => {
         const prev = document.querySelector('.row[aria-current]');
         if (prev) prev.removeAttribute('aria-current');
@@ -303,7 +502,15 @@
     if (!m) return;
     if (m.type === 'init') {
       $('annotate').checked = !!m.annotate;
+      $('annotateAll').checked = !!m.annotateAll;
+      syncAnnotateAll();
+      $('annotateBox').hidden = !m.annotations;
+      withAnnotations = !!m.annotations;
+      rules = Object.assign({}, m.rules);
+      defaultRules = Object.assign({}, m.defaults);
+      buildHelp();
     } else if (m.type === 'issues') {
+      $('loader').hidden = true; // первые данные пришли
       selCount = m.count;
       $('sel').textContent = m.count
         ? 'Выделено текстовых слоёв: ' + m.count
@@ -312,6 +519,10 @@
       render(m);
     } else if (m.type === 'done') {
       $('run').disabled = selCount === 0;
+    } else if (m.type === 'focus-cleared') {
+      activeKey = '';
+      const cur = document.querySelector('.row[aria-current]');
+      if (cur) cur.removeAttribute('aria-current');
     }
   };
 

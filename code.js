@@ -28,6 +28,14 @@ const FUNCTION_WORDS = wordSet(
     'не ни вот вон ну уж то'
 );
 const BEFORE_PARTICLES = wordSet('бы б ли ль же ж');
+// «что», «чем» после предлога — местоимения, а не союзы: «с чем вы согласны», «за что вы» — пробел после обычный
+const PREPOSITIONS = wordSet(
+  'в во к ко с со у о об обо от ото до по на за из изо из-за из-под над под подо при про для без безо ' +
+    'ради через сквозь между меж перед передо пред около возле вокруг после кроме среди против вместо ' +
+    'внутри вне ввиду благодаря согласно вследствие навстречу вдоль поперек спустя мимо близ напротив'
+);
+const PRONOUN_WORDS = wordSet('что чем');
+const PREV_WORD_RE = /([А-Яа-яЁё-]+)[ \u00A0]+$/;
 
 // Составные союзы: пробелы внутри (и после запятой) тоже неразрывные.
 const COMPOUND_RE = new RegExp(
@@ -91,6 +99,10 @@ const PHONE_RE = /(^|[^\d])((?:\+7|8)[ \u00A0]?\(?\d{3}\)?[ \u00A0]?\d{3}[- \u00
 const NUM_RE = /\d{1,3}(?:[ \u00A0\u202F]\d{3}(?!\d))+|\d+/g;
 const YEAR_AFTER_RE = /^[ \u00A0\u202F]*(?:гг?\.|год[а-яё]*)/i;
 const MONTH_BEFORE_RE = new RegExp('(?:' + MONTHS_ALL.join('|') + ')[ \\u00A0]$', 'i');
+// Реквизиты и почтовые индексы не разбиваем: «ИНН 7702045051», «р/с 40702…», «адрес — 115432, г. Москва»
+const REQUISITE_BEFORE_RE = /(?:ИНН|КПП|ОГРНИП|ОГРН|БИК|ОКПО|ОКАТО|ОКТМО|ОКВЭД|ОКОГУ|ОКФС|ОКОПФ|СНИЛС|[РрКкЛл]\/[Сс]|[Сс]ч[её]т[а-яё]*|[Ии]ндекс[а-яё]*)[\s:№.-]{0,4}$/;
+const ADDRESS_BEFORE_RE = /адрес[а-яё]*[\s:—–-]{0,4}$/i;
+const POSTCODE_AFTER_RE = /^,?\s*(?:Россия|РФ|г\.|город|пос\.|п\.|с\.|ул\.|[А-ЯЁ][а-яё-]+\s(?:обл|край|респ))/;
 const WORD_RE = /[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)*/g;
 const UNIT_RE = /(\d) ([A-Za-zА-Яа-яЁё°²³₽$€£¥]+)(\.?)/g;
 const NEXT_UNIT_RE = /^ ([A-Za-zА-Яа-яЁё₽$€£¥]+)/;
@@ -113,14 +125,29 @@ function each(re, text, fn) {
   while ((m = re.exec(text)) !== null) fn(m);
 }
 
+// ------------------------- Выключаемые правила ----------------------------
+// Каждый пользователь настраивает их для себя (clientStorage 'rules'), по умолчанию всё включено.
+const DEFAULT_RULES = Object.freeze({
+  fourDigit: true, // 1000 → 1_000 (если выключить, четырёхзначные числа не разбиваются)
+  shortWords: true, // слова из 1–2 букв, кроме предлогов, союзов и частиц: я_пришёл
+  dash: true, // неразрывный пробел перед тире
+  dups: true // повторяющиеся пробелы → один
+});
+const normRules = (r) => {
+  const out = {};
+  for (const k of Object.keys(DEFAULT_RULES)) out[k] = r && typeof r[k] === 'boolean' ? r[k] : DEFAULT_RULES[k];
+  return out;
+};
+
 // ---------------------------- Разбор текста --------------------------------
 
 /**
  * Возвращает позиции:
  *  replace — обычный пробел, который нужно заменить на неразрывный;
  *  insert  — позиция, перед которой нужно вставить неразрывный пробел (внутри числа).
+ * rules — выключаемые правила (см. DEFAULT_RULES); остальные правила действуют всегда.
  */
-function computeOps(text) {
+function computeOps(text, rules = DEFAULT_RULES) {
   const replace = new Set();
   const insert = new Set();
   const space = (i) => {
@@ -144,9 +171,14 @@ function computeOps(text) {
     if (inPhone(s)) return;
     const prev = text[s - 1] || '';
     if (/[A-Za-zА-Яа-яЁё_#]/.test(prev)) return; // часть идентификатора: ID12345, v2024
-    if ((prev === ',' || prev === '.') && /\d/.test(text[s - 2] || '')) return; // дробная часть, даты 10.11.2024
+    if ((prev === ',' || prev === '.' || prev === '/') && /\d/.test(text[s - 2] || '')) return; // дробная часть, даты 10.11.2024, ИНН/КПП
     if (str[0] === '0') return; // коды, номера с ведущим нулём
     if (/^\d{4}-\d{2}-\d{2}/.test(text.slice(s, s + 10))) return; // дата 2024-11-10
+    const before = text.slice(Math.max(0, s - 24), s);
+    if (REQUISITE_BEFORE_RE.test(before)) return; // ИНН, КПП, ОГРН, БИК, р/с …
+    if (str.replace(/\D/g, '').length === 6 && (ADDRESS_BEFORE_RE.test(before) || POSTCODE_AFTER_RE.test(text.slice(e, e + 30)))) {
+      return; // почтовый индекс
+    }
     if (/[ \u00A0\u202F]/.test(str)) {
       for (let i = 0; i < str.length; i++) space(s + i); // число уже разбито на группы
       return;
@@ -154,6 +186,7 @@ function computeOps(text) {
     if (str.length < 4) return;
     // Годы не разбиваем: «в 2024 г.», «2024 году», «в ноябре 2026»
     if (str.length === 4 && (YEAR_AFTER_RE.test(text.slice(e, e + 12)) || MONTH_BEFORE_RE.test(text.slice(Math.max(0, s - 12), s)))) return;
+    if (str.length === 4 && !rules.fourDigit) return; // правило выключено: 1000 остаётся слитно
     for (let k = str.length - 3; k > 0; k -= 3) insert.add(s + k);
   });
 
@@ -173,7 +206,13 @@ function computeOps(text) {
     const isParticle = BEFORE_PARTICLES.has(key);
     if (isParticle && /[A-Za-zА-Яа-яЁё0-9»”)\]"']/.test(text[s - 2] || '')) space(s - 1);
     if (text[e] !== ' ') return;
-    if (!FUNCTION_WORDS.has(key) && (m[0].length > 2 || isParticle)) return;
+    if (PRONOUN_WORDS.has(key)) {
+      // «чём» — всегда местоимение; «что/чем» после предлога — тоже
+      if (/ё/i.test(m[0])) return;
+      const pw = PREV_WORD_RE.exec(text.slice(Math.max(0, s - 20), s));
+      if (pw && PREPOSITIONS.has(norm1(pw[1]))) return;
+    }
+    if (!FUNCTION_WORDS.has(key) && (m[0].length > 2 || isParticle || !rules.shortWords)) return;
     const next = text[e + 1];
     if (next && !/[\s—–-]/.test(next)) replace.add(e);
   });
@@ -198,7 +237,7 @@ function computeOps(text) {
   each(MONTH_YEAR_RE, text, (m) => replace.add(m.index + m[1].length + m[2].length));
 
   // 7. Тире: пробел перед «—» / «–» неразрывный (чтобы тире не оказывалось в начале строки)
-  each(DASH_RE, text, (m) => replace.add(m.index + 1));
+  if (rules.dash) each(DASH_RE, text, (m) => replace.add(m.index + 1));
 
   // 8. Инициалы: «А._С._Пушкин», «Пушкин_А._С.»
   each(INITIALS_FIRST_RE, text, (m) => {
@@ -279,9 +318,11 @@ function applyList(text, list) {
 }
 
 /** Полная обработка строки (то же, что делает кнопка): повторы → один пробел, затем NBSP. */
-function fixText(text) {
-  const c = collapseDups(text);
-  const list = opsList(computeOps(c.text));
+const noCollapse = (text) => ({ text, dels: [], runs: 0 });
+
+function fixText(text, rules = DEFAULT_RULES) {
+  const c = rules.dups ? collapseDups(text) : noCollapse(text);
+  const list = opsList(computeOps(c.text, rules));
   return { text: applyList(c.text, list), nbsp: list.length, dups: c.runs };
 }
 
@@ -294,9 +335,9 @@ const UNIFORM_FIELDS = [
   'fills', 'textStyleId', 'fillStyleId', 'hyperlink', 'listOptions', 'indentation'
 ];
 
-async function fixNode(node) {
-  const c = collapseDups(node.characters);
-  const list = opsList(computeOps(c.text));
+async function fixNode(node, rules = DEFAULT_RULES) {
+  const c = rules.dups ? collapseDups(node.characters) : noCollapse(node.characters);
+  const list = opsList(computeOps(c.text, rules));
   const edits = list.length + c.dels.length;
   if (!edits) return { nbsp: 0, dups: 0 };
 
@@ -458,7 +499,7 @@ function analyzeNode(node, res) {
 
   // Повторяющиеся пробелы: каждая группа — одно место, выделяются сами пробелы
   let found = 0;
-  each(DUP_RE, text, (m) => {
+  if (rules.dups) each(DUP_RE, text, (m) => {
     found++;
     if (res.dups.items.length < MAX_SHOWN) {
       res.dups.items.push(item(m.index, m.index + m[0].length, [[m.index, m[0].length, true]]));
@@ -470,7 +511,7 @@ function analyzeNode(node, res) {
   }
 
   // Недостающие неразрывные пробелы: соседние правки объединяются в одно место
-  const o = computeOps(text);
+  const o = computeOps(text, rules);
   if (!o.replace.size && !o.insert.size) return;
   const ops = [];
   o.replace.forEach((i) => ops.push([i, 1, false]));
@@ -501,6 +542,11 @@ function analyzeNode(node, res) {
 // Набор слоёв, который показан в окне. Не сбрасывается, когда плагин сам выделяет слой по клику в списке.
 let scope = [];
 let pinnedId = null;
+// Выделение слоя, выбранного по строке, снято — снимаем и подсветку строки в окне
+function unpin() {
+  if (pinnedId) figma.ui.postMessage({ type: 'focus-cleared' });
+  pinnedId = null;
+}
 
 function analyze() {
   scope = scope.filter((n) => !n.removed);
@@ -563,7 +609,7 @@ function collectTextNodes() {
 
 let busy = false;
 
-async function run(annotate) {
+async function run(annotate, annotateAll) {
   if (busy) return;
   busy = true;
   categoryCache = null;
@@ -583,12 +629,14 @@ async function run(annotate) {
           noFont++;
           continue;
         }
-        const r = await fixNode(node);
+        const r = await fixNode(node, rules);
         if (r.nbsp || r.dups) changed++;
         nbsp += r.nbsp;
         dups += r.dups;
 
-        if (annotate && node.characters.trim()) {
+        // Без галочки «даже без неразрывных» аннотация нужна только тексту, где они есть
+        const final = node.characters;
+        if (annotate && final.trim() && (annotateAll || final.indexOf(NBSP) >= 0)) {
           try {
             await syncAnnotation(node, node.characters);
           } catch (e) {
@@ -645,26 +693,44 @@ figma.showUI(__html__, { width: SIZE.w, height: SIZE.h, themeColors: true, title
 
 figma.on('selectionchange', () => {
   const sel = figma.currentPage.selection;
-  if (pinnedId && sel.length === 1 && sel[0].id === pinnedId) return; // это мы выделили слой по клику
-  pinnedId = null;
+  // Слой, выделенный кликом по строке, всё ещё выделен (участок внутри мог смениться) — список и подсветка строки остаются
+  if (pinnedId && sel.length === 1 && sel[0].id === pinnedId) return;
+  unpin();
   schedule(true);
 });
 figma.on('currentpagechange', () => {
   watchPage();
-  pinnedId = null;
+  unpin();
   schedule(true);
 });
 watchPage();
+
+// API аннотаций есть не везде (например, в старых версиях Figma). Тариф плагин узнать не может:
+// на бесплатном плане Figma принимает аннотации, но не показывает их — поэтому в окне только пометка.
+const canAnnotate = !!(figma.annotations && typeof figma.annotations.getAnnotationCategoriesAsync === 'function');
+
+// Текущие настройки правил пользователя (загружаются при запуске)
+let rules = normRules(null);
 
 figma.ui.onmessage = async (msg) => {
   switch (msg.type) {
     case 'ready': {
       const annotate = (await figma.clientStorage.getAsync('annotate')) === true;
-      figma.ui.postMessage({ type: 'init', annotate });
+      const annotateAll = (await figma.clientStorage.getAsync('annotateAll')) === true;
+      rules = normRules(await figma.clientStorage.getAsync('rules'));
+      figma.ui.postMessage({ type: 'init', annotations: canAnnotate, annotate, annotateAll, rules, defaults: DEFAULT_RULES });
       scope = collectTextNodes();
       analyze();
       break;
     }
+    case 'set-rules':
+      rules = normRules(msg.rules);
+      await figma.clientStorage.setAsync('rules', rules);
+      analyze(); // списки в окне учитывают выключенные правила
+      break;
+    case 'set-annotate-all':
+      await figma.clientStorage.setAsync('annotateAll', !!msg.value);
+      break;
     case 'set-annotate':
       await figma.clientStorage.setAsync('annotate', !!msg.value);
       break;
@@ -675,7 +741,7 @@ figma.ui.onmessage = async (msg) => {
       break;
     }
     case 'run':
-      await run(!!msg.annotate);
+      await run(canAnnotate && !!msg.annotate, !!msg.annotateAll);
       break;
     case 'focus': {
       const node = await figma.getNodeByIdAsync(msg.id);

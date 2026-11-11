@@ -1,5 +1,5 @@
 'use strict';
-// Snapshot tests for fixText (code.js) without Figma: duplicate spaces collapse + computeOps.
+// Snapshot tests for fixText (code.js) without Figma: duplicate spaces collapse + computeOps (+ optional rule toggles).
 // "_" in expected = U+00A0.
 // node tests/run.js           → compare
 // node tests/run.js --update  → rewrite expected values (review the diff!)
@@ -13,16 +13,18 @@ const ctx = { figma: { showUI() {}, on() {}, ui: {}, annotations: {}, currentPag
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(root, 'code.js'), 'utf8'), ctx);
 const fixText = vm.runInContext('fixText', ctx);
+const normRules = vm.runInContext('normRules', ctx);
 
 const NB = String.fromCharCode(0xa0);
-const apply = (text) => fixText(text).text.split(NB).join('_');
+// c.rules (optional): turned-off rules, e.g. {"fourDigit": false}
+const apply = (text, rules) => fixText(text, normRules(rules)).text.split(NB).join('_');
 
 const file = path.join(__dirname, 'cases.json');
 const cases = JSON.parse(fs.readFileSync(file, 'utf8'));
 const update = process.argv.includes('--update');
 let bad = 0;
 for (const c of cases) {
-  const got = apply(c.in);
+  const got = apply(c.in, c.rules);
   if (got === c.out) continue;
   if (update) { c.out = got; continue; }
   bad++;
